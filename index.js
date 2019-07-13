@@ -1,5 +1,4 @@
 /* eslint-disable no-case-declarations */
-/* eslint-disable no-console */
 /**
  *
  *  ____
@@ -30,7 +29,6 @@ class sm {
    * @param {*} opts
    */
   constructor(Vue) {
-    // création d'une nouvelle instance pour gérer des données réactives
     this.storeVM = new Vue({
       data() {
         return {
@@ -40,7 +38,6 @@ class sm {
       }
     });
 
-    // Ajout un handler
     window.addEventListener(
       "storage",
       e => this._onStorageEvent(e, this),
@@ -58,11 +55,19 @@ class sm {
     // callback
     const fn = self.storeVM.$data.watchers.find(c => c.name === e.key);
     if (!fn) return;
-    fn.callback(type, e.key, e.oldValue, e.newValue, item ? false : true);
+    fn.callback({
+      type,
+      name: e.key,
+      oldValue: e.oldValue,
+      newValue: e.newValue,
+      remove: item ? false : true,
+      event: "storage event"
+    });
   }
 
-  _timeoutAdd(name, timeout, type) {
+  _timeoutAdd(type, name, timeout) {
     this.storeVM.$data.timeouts.push({
+      type,
       name,
       timeout: setTimeout(() => {
         this._timeoutDel(type, name);
@@ -82,11 +87,19 @@ class sm {
     const fn = this.storeVM.$data.watchers.find(c => c.name === name);
     if (!fn) return;
     const val = this.managerGet(type, name);
-    fn.callback(val, null, true);
+    fn.callback({
+      type,
+      name,
+      oldValue: val,
+      newValue: null,
+      remove: true,
+      event: "timeout"
+    });
   }
 
-  _watcherAdd(name, callback) {
+  _watcherAdd(type, name, callback) {
     this.storeVM.$data.watchers.push({
+      type,
       name,
       callback
     });
@@ -95,6 +108,24 @@ class sm {
     this.storeVM.$data.watchers = this.storeVM.$data.watchers.filter(
       t => t.name !== name
     );
+  }
+
+  _getCookieExpiry(val) {
+    let res = null;
+    if (typeof val === "number") {
+      res = new Date(
+        new Date().getTime() + parseInt(val, 10) * 1000 * 60 * 60 * 24
+      ).toGMTString();
+    } else {
+      if (typeof val === "object") {
+        if (val instanceof Date) {
+          res = val.toGMTString();
+        } else if (val.hasOwnProperty("expiry")) {
+          res = val;
+        }
+      }
+    }
+    return res ? `;expires=${res}` : "";
   }
 
   managerSet(type, name, value, timeout = 0, watcher = null) {
@@ -111,33 +142,18 @@ class sm {
 
       default:
         let cookie = `${escape(name)}=${escape(value)}`;
-        const path = watcher && watcher.path ? watcher.path : "/";
-        const domain = watcher && watcher.domain ? watcher.domain : "/";
-
-        if (timeout) {
-          // C'est une instance de Date
-          if (timeout instanceof Date) {
-            // Ce n'est pas une date valide, on met celle du jour
-            if (isNaN(timeout.getTime())) timeout = new Date();
-          } else
-            timeout = new Date(
-              new Date().getTime() + parseInt(timeout, 10) * 1000 * 60 * 60 * 24
-            );
-
-          cookie += `,expires=${timeout.toGMTString()}`;
+        cookie += this._getCookieExpiry(timeout);
+        if (watcher) {
+          if (watcher.path) cookie += `;path=${watcher.path}`;
+          if (watcher.domain) cookie += `;domain=${watcher.domain}`;
         }
-
-        if (path) cookie += `,path=${path}`;
-        if (domain) cookie += `,domain=${domain}`;
-
-        cookie += ";";
         document.cookie = cookie;
         break;
     }
 
     if (type === types.COOKIE) return;
-    if (timeout) this._timeoutAdd(name, timeout, type);
-    if (watcher) this._watcherAdd(name, watcher);
+    if (timeout) this._timeoutAdd(type, name, timeout);
+    if (watcher) this._watcherAdd(type, name, watcher);
   }
 
   managerGet(type, name) {
@@ -178,19 +194,35 @@ class sm {
   }
 
   managerClear(type) {
-    this.storeVM.$data.timeouts = [];
-    this.storeVM.$data.watchers = [];
-
     switch (type) {
       case types.SESSION:
+        this.storeVM.$data.timeouts = this.storeVM.$data.timeouts.filter(
+          e => e.type !== types.SESSION
+        );
+        this.storeVM.$data.watchers = this.storeVM.$data.watchers.filter(
+          e => e.type !== types.SESSION
+        );
         sessionStorage.clear();
         break;
 
       case types.LOCAL:
+        this.storeVM.$data.timeouts = this.storeVM.$data.timeouts.filter(
+          e => e.type !== types.LOCAL
+        );
+        this.storeVM.$data.watchers = this.storeVM.$data.watchers.filter(
+          e => e.type !== types.LOCAL
+        );
         localStorage.clear();
         break;
 
       default:
+        document.cookie.split(";").forEach(c => {
+          const index = c.indexOf("=");
+          if (index >= 0) {
+            const cookie = c.substring(0, index);
+            this.managerSet(types.COOKIE, cookie, "", -1);
+          }
+        });
         break;
     }
   }
@@ -198,30 +230,42 @@ class sm {
 
 export default {
   /**
-   * Install lng plugin
+   * Install sm plugin
    * @param {Vue} Vue - Vue instance
    * @param {Object} options - Options for the plugin
    */
   install: (Vue, options = {}) => {
     const instance = new sm(Vue, options);
-    // session
-    Vue.prototype.$smSSet = (name, value, timeout, watcher) => instance.managerSet(types.SESSION, name, value, timeout, watcher);
-    Vue.prototype.$smSGet = name => instance.managerGet(types.SESSION, name);
-    Vue.prototype.$smSDel = (name, execCallback) => instance.managerDel(types.SESSION, name, execCallback);
-    Vue.prototype.$smSClear = () => instance.managerClear(types.SESSION);
 
-    // local
-    Vue.prototype.$smLSet = (name, value, timeout, watcher) =>
-      instance.managerSet(types.LOCAL, name, value, timeout, watcher);
-    Vue.prototype.$smLGet = name => instance.managerGet(types.LOCAL, name);
-    Vue.prototype.$smLDel = (name, execCallback) => instance.managerDel(types.LOCAL, name, execCallback);
-    Vue.prototype.$smLClear = () => instance.managerClear(types.LOCAL);
+    const session = {
+      set: (name, value, timeout, watcher) =>
+        instance.managerSet(types.SESSION, name, value, timeout, watcher),
+      get: name => instance.managerGet(types.SESSION, name),
+      del: (name, execCallback) =>
+        instance.managerDel(types.SESSION, name, execCallback),
+      clear: () => instance.managerClear(types.SESSION)
+    };
 
-    // cookie
-    Vue.prototype.$smCSet = (name, value, expires, path, domain) =>
-      instance.managerSet(types.COOKIE, name, value, expires, { path, domain });
-    Vue.prototype.$smCGget = name => instance.managerGet(types.COOKIE, name);
-    Vue.prototype.$smCDel = name => instance.managerDel(types.COOKIE, name, false);
-    Vue.prototype.$smCClear = () => instance.managerClear(types.COOKIE);
+    const local = {
+      set: (name, value, timeout, watcher) =>
+        instance.managerSet(types.LOCAL, name, value, timeout, watcher),
+      get: name => instance.managerGet(types.LOCAL, name),
+      del: (name, execCallback) =>
+        instance.managerDel(types.LOCAL, name, execCallback),
+      clear: () => instance.managerClear(types.LOCAL)
+    };
+
+    const cookie = {
+      set: (name, value, expires, path, domain) =>
+        instance.managerSet(types.COOKIE, name, value, expires, {
+          path,
+          domain
+        }),
+      get: name => instance.managerGet(types.COOKIE, name),
+      del: name => instance.managerDel(types.COOKIE, name, false),
+      clear: () => instance.managerClear(types.COOKIE)
+    };
+
+    Vue.prototype.$sm = { session, local, cookie };
   }
 };
