@@ -1,14 +1,14 @@
 {
-  "name": "vue-sm",
+  "name": "vue-storage-manager",
   "description": "Storage manager for localstorage, sessionstorage and cookies for Vue.js project.",
   "version": "1.0.0",
   "author": {
     "name": "Brice CHAPONNEAU",
     "email": "chaponneau.brice@gmail.com"
   },
-  "homepage": "https://github.com/BriceChaponneau/vue-sm#readme",
+  "homepage": "https://github.com/BriceChaponneau/vue-storage-manager#readme",
   "bugs": {
-    "url": "https://github.com/BriceChaponneau/vue-sm/issues"
+    "url": "https://github.com/BriceChaponneau/vue-storage-manager/issues"
   },
   "keywords": [
     "localstorage",
@@ -17,7 +17,6 @@
     "session storage",
     "storage manager",
     "plugin",
-    "sm",
     "cookie",
     "vue",
     "vue.js"
@@ -25,14 +24,14 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/BriceChaponneau/vue-sm.git"
+    "url": "git+https://github.com/BriceChaponneau/vue-storage-manager.git"
   },
   "private": false,
   "scripts": {
-    "build": "vue-cli-service build --name vue-sm --entry ./index.js --target lib",
+    "build": "vue-cli-service build --name vue-storage-manager --entry ./index.js --target lib",
     "lint": "vue-cli-service lint"
   },
-  "main": "./dist/vue-sm.common.js",
+  "main": "./dist/vue-storage-manager.common.js",
   "dependencies": {},
   "devDependencies": {
     "@vue/cli-plugin-babel": "^3.8.0",
